@@ -5,6 +5,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
 import json
+import google.generativeai as genai
+import time
 
 from papers.question_answering_fullwiki_papers import papers as qa_papers
 from papers.depth_perception_papers import papers as depth_papers
@@ -13,13 +15,24 @@ from papers.GLUE_papers import papers as glue_papers
 
 # Setup
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=300)
+
+# Gemini setup
+GEMINI_API_KEY = "AIzaSyC9p60isML9KFov7vxrjYDf4NwKySfNq6A"
+genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 # Dictionary to store vectorstores per paper
 paper_vectorstores = {}
 
+def convert_abs_to_pdf(arxiv_url):
+    if "arxiv.org/abs/" in arxiv_url:
+        return arxiv_url.replace("/abs/", "/pdf/") + ".pdf"
+    return arxiv_url
+
 def download_pdf(arxiv_url, save_path="paper.pdf"):
-    response = requests.get(arxiv_url)
+    pdf_url = convert_abs_to_pdf(arxiv_url)
+    response = requests.get(pdf_url)
     with open(save_path, "wb") as f:
         f.write(response.content)
     return save_path
@@ -41,7 +54,7 @@ def index_paper(arxiv_url, paper_id):
     if os.path.exists(pdf_path):
         os.remove(pdf_path)
 
-def query_paper_chunks(paper_id, prompt, k=3):
+def query_paper_chunks(paper_id, prompt, k=7):
     if paper_id not in paper_vectorstores:
         raise ValueError(f"Paper '{paper_id}' not indexed yet.")
     vs = paper_vectorstores[paper_id]
@@ -49,16 +62,26 @@ def query_paper_chunks(paper_id, prompt, k=3):
     docs = retriever.get_relevant_documents(prompt)
     return [d.page_content for d in docs]
 
-def get_methodology_chunks(papers, paper_id_field="method_name", arxiv_field="arxiv_link", prompt="Describe the methodology used in this paper.", k=3):
+def clean_chunk_with_gemini(chunk):
+    prompt = (
+        "Format the following scientific methodology text for clarity, removing any unneeded tokens or artifacts, but do not lose any information. Output only the cleaned text, without any introductory statements\n\n"
+        + chunk
+    )
+    response = gemini_model.generate_content(prompt)
+    time.sleep(1.5)  # Add delay to avoid rate limit errors
+    return response.text.strip()
+
+def get_methodology_chunks(papers, paper_id_field="method_name", arxiv_field="arxiv_link", prompt="Extract and summarize the methodology section of this paper, focusing on the contributions, experimental setup, data processing, models used, and evaluation procedures and evidences for these ideas and methods .", k=7):
     results = {}
     for paper in papers:
         paper_id = paper[paper_id_field]
         arxiv_url = paper[arxiv_field]
         index_paper(arxiv_url, paper_id)
         chunks = query_paper_chunks(paper_id, prompt, k)
+        cleaned_chunks = [clean_chunk_with_gemini(chunk) for chunk in chunks]
         results[paper_id] = {
             "arxiv_link": arxiv_url,
-            "chunks": chunks
+            "chunks": cleaned_chunks
         }
     return results
 
@@ -68,7 +91,7 @@ if __name__ == "__main__":
     for papers in [qa_papers, depth_papers, seg_papers, glue_papers]:
         results = get_methodology_chunks(papers)
         all_results.update(results)
-    with open("methodology_chunks.json", "w") as f:
+    with open("methodology_chunks_cleaned.json", "w") as f:
         json.dump(all_results, f, indent=2)
-    print("Methodology chunks saved to methodology_chunks.json")
+    print("Cleaned methodology chunks saved to methodology_chunks_cleaned.json")
 
