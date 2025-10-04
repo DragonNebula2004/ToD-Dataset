@@ -7,6 +7,8 @@ from langchain.vectorstores import FAISS
 import json
 import google.generativeai as genai
 import time
+from dotenv import load_dotenv
+load_dotenv()
 
 from papers.question_answering_fullwiki_papers import papers as qa_papers
 from papers.depth_perception_papers import papers as depth_papers
@@ -18,7 +20,7 @@ embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-
 splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=300)
 
 # Gemini setup
-GEMINI_API_KEY = "AIzaSyC9p60isML9KFov7vxrjYDf4NwKySfNq6A"
+GEMINI_API_KEY = os.getenv("GEMINI_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
@@ -64,7 +66,7 @@ def query_paper_chunks(paper_id, prompt, k=7):
 
 def clean_chunk_with_gemini(chunk):
     prompt = (
-        "Format the following scientific methodology text for clarity, removing any unneeded tokens or artifacts, but do not lose any information. Output only the cleaned text, without any introductory statements\n\n"
+        "Format the following scientific methodology text for clarity, removing any unneeded tokens or artifacts, but do not lose any information. Output only the cleaned text, without any introductory statements or justifications. Just information you have extracted from the text.\n\n"
         + chunk
     )
     response = gemini_model.generate_content(prompt)
@@ -91,7 +93,7 @@ if __name__ == "__main__":
     for papers in [qa_papers, depth_papers, seg_papers, glue_papers]:
         results = get_methodology_chunks(papers)
         all_results.update(results)
-    with open("methodology_chunks_cleaned.json", "w") as f:
+    with open("methodology_chunks.json", "w") as f:
         json.dump(all_results, f, indent=2)
-    print("Cleaned methodology chunks saved to methodology_chunks_cleaned.json")
+    print("Cleaned methodology chunks saved to methodology_chunks.json")
 
