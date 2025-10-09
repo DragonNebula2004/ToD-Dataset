@@ -7,6 +7,7 @@ from langchain.vectorstores import FAISS
 import json
 import google.generativeai as genai
 import time
+from unidecode import unidecode
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -66,14 +67,14 @@ def query_paper_chunks(paper_id, prompt, k=7):
 
 def clean_chunk_with_gemini(chunk):
     prompt = (
-        "Format the following scientific methodology text for clarity, removing any unneeded tokens or artifacts, but do not lose any information. Output only the cleaned text, without any introductory statements or justifications. Just information you have extracted from the text.\n\n"
+        "Format the following scientific methodology text for clarity, removing any unneeded tokens or artifacts, but do not lose any information. Output only the cleaned text, without any introductory statements or justifications. Do not include any hyperlinks or sources in your response. Do not include any tables in your response. Just information you have extracted from the text.\n\n"
         + chunk
     )
     response = gemini_model.generate_content(prompt)
     time.sleep(1.5)  # Add delay to avoid rate limit errors
-    return response.text.strip()
+    return unidecode(response.text.strip())
 
-def get_methodology_chunks(papers, paper_id_field="method_name", arxiv_field="arxiv_link", prompt="Extract and summarize the methodology section of this paper, focusing on the contributions, experimental setup, data processing, models used, and evaluation procedures and evidences for these ideas and methods .", k=7):
+def get_methodology_chunks(papers, paper_id_field="method_name", arxiv_field="arxiv_link", prompt="Extract and summarize the methodology section of this paper, focusing on the contributions, experimental setup, data processing, models used, and evaluation procedures and evidences for these ideas and methods. Strictly do not extract unneccesary chunks that contain table data and author information.", k=7):
     results = {}
     for paper in papers:
         paper_id = paper[paper_id_field]

@@ -1,4 +1,5 @@
 import json
+import re
 from papers.question_answering_fullwiki_papers import papers as qa_papers
 from papers.depth_perception_papers import papers as depth_papers
 from papers.image_segmentation_anomaly_track_papers import papers as seg_papers
@@ -18,19 +19,21 @@ def add_pairs(papers, task_name, metric, methodology_chunks):
     description = task_descriptions.get(task_name, "")
     for paper1, paper2 in combinations(papers, 2):
         topic = f"{description} What is the better method for {task_name}: {paper1['method_name']} or {paper2['method_name']}?"
+        methodology1 = '\n'.join(methodology_chunks.get(paper1["method_name"], {}).get("chunks", []))
+        methodology2 = '\n'.join(methodology_chunks.get(paper2["method_name"], {}).get("chunks", []))
         entry = {
             "topic": topic,
             "paper1": {
                 "arxiv_link": paper1["arxiv_link"],
                 "title": paper1["title"],
-                "abstract": paper1["abstract"],
-                "methodology": methodology_chunks.get(paper1["method_name"], {}).get("chunks", [])
+                "abstract": re.sub(r'\s+', ' ', paper1["abstract"].replace('\n', ' ')).strip(),
+                "methodology": methodology1
             },
             "paper2": {
                 "arxiv_link": paper2["arxiv_link"],
                 "title": paper2["title"],
-                "abstract": paper2["abstract"],
-                "methodology": methodology_chunks.get(paper2["method_name"], {}).get("chunks", [])
+                "abstract": re.sub(r'\s+', ' ', paper2["abstract"].replace('\n', ' ')).strip(),
+                "methodology": methodology2
             },
             "ground_truth": "paper1" if paper1[metric] >= paper2[metric] else "paper2"
         }
